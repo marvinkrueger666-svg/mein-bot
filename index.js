@@ -1,10 +1,12 @@
+require('dotenv').config();
+
 const { Client, GatewayIntentBits, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-// ------------------ Moderations-Daten ------------------
+// ------------------ Daten ------------------
 const warnings = new Map();
 const modLogs = [];
 
@@ -12,241 +14,204 @@ const modLogs = [];
 const cooldowns = new Map();
 const cooldown = 2000;
 
-// ------------------ Bot startet ------------------
+// ------------------ READY ------------------
 client.once('ready', async () => {
-  console.log('Bot ist online!');
+  console.log(`✅ Bot online als ${client.user.tag}`);
 
   const commands = [
 
     new SlashCommandBuilder()
       .setName('ankündigung')
-      .setDescription('Schreibt eine Ankündigung in den Kanal')
+      .setDescription('Schreibt eine Ankündigung')
       .addStringOption(option =>
         option.setName('nachricht')
           .setDescription('Die Nachricht')
-          .setRequired(true))
-      .toJSON(),
+          .setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('warn')
-      .setDescription('Gibt einem Nutzer eine Warnung')
-      .addUserOption(option => option.setName('user').setDescription('Der Nutzer').setRequired(true))
-      .addStringOption(option => option.setName('grund').setDescription('Grund').setRequired(true))
-      .toJSON(),
+      .setDescription('Warnt einen Nutzer')
+      .addUserOption(option => option.setName('user').setRequired(true))
+      .addStringOption(option => option.setName('grund').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('kick')
       .setDescription('Kickt einen Nutzer')
-      .addUserOption(option => option.setName('user').setDescription('Der Nutzer').setRequired(true))
-      .addStringOption(option => option.setName('grund').setDescription('Grund').setRequired(true))
-      .toJSON(),
+      .addUserOption(option => option.setName('user').setRequired(true))
+      .addStringOption(option => option.setName('grund').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('ban')
       .setDescription('Bannt einen Nutzer')
-      .addUserOption(option => option.setName('user').setDescription('Der Nutzer').setRequired(true))
-      .addStringOption(option => option.setName('grund').setDescription('Grund').setRequired(true))
-      .toJSON(),
+      .addUserOption(option => option.setName('user').setRequired(true))
+      .addStringOption(option => option.setName('grund').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('mute')
-      .setDescription('Mute einen Nutzer temporär')
-      .addUserOption(option => option.setName('user').setDescription('Der Nutzer').setRequired(true))
-      .addIntegerOption(option => option.setName('sekunden').setDescription('Dauer in Sekunden').setRequired(true))
-      .toJSON(),
+      .setDescription('Mute einen Nutzer')
+      .addUserOption(option => option.setName('user').setRequired(true))
+      .addIntegerOption(option => option.setName('sekunden').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('lock')
-      .setDescription('Sperrt einen Kanal')
-      .addChannelOption(option => option.setName('channel').setDescription('Der Kanal').setRequired(true))
-      .toJSON(),
+      .setDescription('Sperrt Kanal')
+      .addChannelOption(option => option.setName('channel').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('unlock')
-      .setDescription('Entsperrt einen Kanal')
-      .addChannelOption(option => option.setName('channel').setDescription('Der Kanal').setRequired(true))
-      .toJSON(),
+      .setDescription('Entsperrt Kanal')
+      .addChannelOption(option => option.setName('channel').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('clear')
       .setDescription('Löscht Nachrichten')
-      .addIntegerOption(option => option.setName('anzahl').setDescription('Anzahl').setRequired(true))
-      .toJSON(),
+      .addIntegerOption(option => option.setName('anzahl').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('logs')
-      .setDescription('Zeigt Moderationslogs')
-      .toJSON(),
+      .setDescription('Zeigt Logs'),
 
-    // ✅ UPRANK COMMAND
     new SlashCommandBuilder()
       .setName('uprank')
       .setDescription('Gibt einem Nutzer einen Rang')
-      .addUserOption(option =>
-        option.setName('user')
-          .setDescription('Der Nutzer')
-          .setRequired(true))
-      .addRoleOption(option =>
-        option.setName('rolle')
-          .setDescription('Die neue Rolle')
-          .setRequired(true))
-      .toJSON()
+      .addUserOption(option => option.setName('user').setRequired(true))
+      .addRoleOption(option => option.setName('rolle').setRequired(true))
   ];
 
   for (const guild of client.guilds.cache.values()) {
     await guild.commands.set(commands);
   }
 
-  console.log('Slash-Commands registriert!');
+  console.log('✅ Slash Commands registriert');
 });
 
-// ------------------ Nachrichten-Listener ------------------
+// ------------------ MESSAGE ------------------
 client.on('messageCreate', message => {
   if (message.author.bot) return;
 
   const userId = message.author.id;
   const now = Date.now();
 
-  if (!cooldowns.has(userId)) cooldowns.set(userId, now);
-  else {
-    const lastTime = cooldowns.get(userId);
-    if (now - lastTime < cooldown) {
-      message.delete();
-      message.channel.send(`${message.author}, bitte nicht spammen!`)
-        .then(msg => setTimeout(() => msg.delete(), 3000));
-      return;
-    }
-    cooldowns.set(userId, now);
+  if (cooldowns.has(userId) && now - cooldowns.get(userId) < cooldown) {
+    message.delete();
+    message.channel.send('Bitte nicht spammen!').then(msg => setTimeout(() => msg.delete(), 3000));
+    return;
   }
 
-  if (message.content.toLowerCase() === '!ping') {
-    message.channel.send(`Pong! 🏓 ${message.author}`);
+  cooldowns.set(userId, now);
+
+  if (message.content === '!ping') {
+    message.reply('🏓 Pong!');
   }
 });
 
-// ------------------ Slash-Commands ------------------
+// ------------------ INTERACTIONS ------------------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const member = interaction.member;
 
-  // ✅ Permission Check (jetzt mit Rollen!)
-  if (!member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-    if (interaction.commandName !== 'logs') {
-      return interaction.reply({ content: 'Du hast keine Berechtigung!', ephemeral: true });
-    }
-  }
-
-  // ------------------ /uprank ------------------
+  // ------------------ UPRANK ------------------
   if (interaction.commandName === 'uprank') {
+    if (!member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+      return interaction.reply({ content: 'Keine Berechtigung!', ephemeral: true });
+    }
+
     const user = interaction.options.getUser('user');
     const role = interaction.options.getRole('rolle');
+    const target = await interaction.guild.members.fetch(user.id);
 
-    const memberTarget = await interaction.guild.members.fetch(user.id);
+    const oldRole = target.roles.highest;
 
-    const oldRole = memberTarget.roles.highest;
-
-    await memberTarget.roles.add(role);
+    await target.roles.add(role);
 
     modLogs.push({
       type: 'UPRANK',
       user: user.tag,
-      moderator: member.user.tag,
       oldRole: oldRole.name,
       newRole: role.name,
-      timestamp: new Date().toLocaleString()
+      mod: member.user.tag
     });
 
-    return interaction.reply({
-      content: `⬆️ **UPRANK!**
+    return interaction.reply(`⬆️ **UPRANK**
 
-👤 Nutzer: ${user}
-📉 Vorher: **${oldRole.name}**
-📈 Jetzt: **${role.name}**
-
-Glückwunsch! 🎉`
-    });
+👤 ${user}
+📉 Vorher: ${oldRole.name}
+📈 Jetzt: ${role.name}`);
   }
 
-  // ------------------ /warn ------------------
+  // ------------------ MOD COMMANDS ------------------
+  if (['warn','kick','ban','mute','clear','lock','unlock'].includes(interaction.commandName)) {
+    if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Keine Berechtigung!', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'ankündigung') {
+    const msg = interaction.options.getString('nachricht');
+    await interaction.channel.send(`📢 ${msg}`);
+    return interaction.reply({ content: 'Gesendet!', ephemeral: true });
+  }
+
   if (interaction.commandName === 'warn') {
     const user = interaction.options.getUser('user');
     const grund = interaction.options.getString('grund');
 
-    const currentWarnings = warnings.get(user.id) || 0;
-    warnings.set(user.id, currentWarnings + 1);
+    warnings.set(user.id, (warnings.get(user.id) || 0) + 1);
 
-    modLogs.push({ type: 'WARN', user: user.tag, moderator: member.user.tag, reason: grund, timestamp: new Date().toLocaleString() });
-
-    return interaction.reply(`⚠️ ${user} wurde gewarnt! Grund: ${grund}`);
+    return interaction.reply(`⚠️ ${user} wurde gewarnt (${grund})`);
   }
 
-  // ------------------ /kick ------------------
   if (interaction.commandName === 'kick') {
     const user = interaction.options.getUser('user');
-    const memberTarget = await interaction.guild.members.fetch(user.id);
+    const target = await interaction.guild.members.fetch(user.id);
 
-    await memberTarget.kick();
-
-    return interaction.reply(`✅ ${user} wurde gekickt!`);
+    await target.kick();
+    return interaction.reply(`👢 ${user} gekickt`);
   }
 
-  // ------------------ /ban ------------------
   if (interaction.commandName === 'ban') {
     const user = interaction.options.getUser('user');
-    const memberTarget = await interaction.guild.members.fetch(user.id);
+    const target = await interaction.guild.members.fetch(user.id);
 
-    await memberTarget.ban();
-
-    return interaction.reply(`✅ ${user} wurde gebannt!`);
+    await target.ban();
+    return interaction.reply(`🔨 ${user} gebannt`);
   }
 
-  // ------------------ /mute ------------------
   if (interaction.commandName === 'mute') {
     const user = interaction.options.getUser('user');
-    const sekunden = interaction.options.getInteger('sekunden');
-    const memberTarget = await interaction.guild.members.fetch(user.id);
+    const sec = interaction.options.getInteger('sekunden');
+    const target = await interaction.guild.members.fetch(user.id);
 
-    await memberTarget.timeout(sekunden * 1000);
-
-    return interaction.reply(`🔇 ${user} wurde gemutet!`);
+    await target.timeout(sec * 1000);
+    return interaction.reply(`🔇 ${user} gemutet`);
   }
 
-  // ------------------ /lock ------------------
   if (interaction.commandName === 'lock') {
     const channel = interaction.options.getChannel('channel');
     await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
-
-    return interaction.reply(`🔒 Kanal gesperrt!`);
+    return interaction.reply('🔒 Kanal gesperrt');
   }
 
-  // ------------------ /unlock ------------------
   if (interaction.commandName === 'unlock') {
     const channel = interaction.options.getChannel('channel');
     await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: true });
-
-    return interaction.reply(`🔓 Kanal entsperrt!`);
+    return interaction.reply('🔓 Kanal entsperrt');
   }
 
-  // ------------------ /clear ------------------
   if (interaction.commandName === 'clear') {
-    const anzahl = interaction.options.getInteger('anzahl');
-    await interaction.channel.bulkDelete(anzahl, true);
-
-    return interaction.reply(`🧹 ${anzahl} Nachrichten gelöscht!`);
+    const amount = interaction.options.getInteger('anzahl');
+    await interaction.channel.bulkDelete(amount, true);
+    return interaction.reply(`🧹 ${amount} gelöscht`);
   }
 
-  // ------------------ /logs ------------------
   if (interaction.commandName === 'logs') {
-    if (modLogs.length === 0) return interaction.reply('Keine Logs vorhanden.');
+    if (modLogs.length === 0) return interaction.reply('Keine Logs');
 
-    const lastLogs = modLogs.slice(-10).reverse().map(log =>
-      `[${log.timestamp}] ${log.type} | ${log.user || ''} ${log.oldRole ? `(${log.oldRole} → ${log.newRole})` : ''}`
-    ).join('\n');
-
-    return interaction.reply(`📜 Logs:\n${lastLogs}`);
+    const text = modLogs.slice(-5).map(l => `${l.type} | ${l.user || ''}`).join('\n');
+    return interaction.reply(text);
   }
 });
 
-// ------------------ Bot Login ------------------
+// ------------------ LOGIN ------------------
 client.login(process.env.TOKEN);
