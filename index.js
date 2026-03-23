@@ -3,93 +3,58 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-// ------------------ Daten ------------------
-const warnings = new Map();
-const modLogs = [];
-const cooldowns = new Map();
-const cooldown = 2000;
-
-// ------------------ READY ------------------
+// ---------------- READY ----------------
 client.once('clientReady', async () => {
   console.log(`✅ Bot online als ${client.user.tag}`);
 
   const commands = [
-
     new SlashCommandBuilder()
       .setName('ankündigung')
       .setDescription('Sendet eine Ankündigung')
       .addStringOption(option =>
-        option.setName('nachricht')
-          .setDescription('Die Nachricht')
-          .setRequired(true)),
+        option.setName('nachricht').setRequired(true)
+      ),
 
     new SlashCommandBuilder()
       .setName('uprank')
-      .setDescription('Gibt einem Nutzer eine Rolle')
+      .setDescription('Gibt Rolle')
       .addUserOption(option => option.setName('user').setRequired(true))
-      .addRoleOption(option => option.setName('rolle').setRequired(true)),
-
-    new SlashCommandBuilder()
-      .setName('warn')
-      .setDescription('Warnt einen Nutzer')
-      .addUserOption(option => option.setName('user').setRequired(true))
-      .addStringOption(option => option.setName('grund').setRequired(true)),
-
-    new SlashCommandBuilder()
-      .setName('clear')
-      .setDescription('Löscht Nachrichten')
-      .addIntegerOption(option => option.setName('anzahl').setRequired(true))
+      .addRoleOption(option => option.setName('rolle').setRequired(true))
   ];
 
   for (const guild of client.guilds.cache.values()) {
     await guild.commands.set(commands);
   }
 
-  console.log('✅ Commands neu registriert!');
+  console.log('✅ Commands registriert');
 });
 
-// ------------------ MESSAGE ------------------
-client.on('messageCreate', message => {
-  if (message.author.bot) return;
-
-  const now = Date.now();
-  const last = cooldowns.get(message.author.id);
-
-  if (last && now - last < cooldown) {
-    message.delete();
-    return;
-  }
-
-  cooldowns.set(message.author.id, now);
-
-  if (message.content === '!ping') {
-    message.reply('🏓 Pong!');
-  }
-});
-
-// ------------------ COMMANDS ------------------
+// ---------------- COMMANDS ----------------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // 🔥 WICHTIG → verhindert "reagiert nicht"
+  await interaction.deferReply();
+
   try {
 
-    // ------------------ ANKÜNDIGUNG ------------------
+    // ---------------- ANKÜNDIGUNG ----------------
     if (interaction.commandName === 'ankündigung') {
       const msg = interaction.options.getString('nachricht');
 
-      await interaction.channel.send(`📢 **Ankündigung:**\n${msg}`);
+      await interaction.channel.send(`📢 ${msg}`);
 
-      return interaction.reply({ content: '✅ Gesendet!', ephemeral: true });
+      return interaction.editReply('✅ Gesendet!');
     }
 
-    // ------------------ UPRANK ------------------
+    // ---------------- UPRANK ----------------
     if (interaction.commandName === 'uprank') {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-        return interaction.reply({ content: '❌ Keine Rechte!', ephemeral: true });
+        return interaction.editReply('❌ Keine Rechte!');
       }
 
       const user = interaction.options.getUser('user');
@@ -100,48 +65,20 @@ client.on('interactionCreate', async interaction => {
 
       await target.roles.add(role);
 
-      return interaction.reply(
-        `⬆️ **UPRANK!**
+      return interaction.editReply(
+        `⬆️ UPRANK
 
 👤 ${user}
 📉 Vorher: ${oldRole.name}
-📈 Jetzt: ${role.name}
-
-🎉 Glückwunsch!`
+📈 Jetzt: ${role.name}`
       );
-    }
-
-    // ------------------ WARN ------------------
-    if (interaction.commandName === 'warn') {
-      const user = interaction.options.getUser('user');
-      const grund = interaction.options.getString('grund');
-
-      warnings.set(user.id, (warnings.get(user.id) || 0) + 1);
-
-      return interaction.reply(`⚠️ ${user} wurde gewarnt!\nGrund: ${grund}`);
-    }
-
-    // ------------------ CLEAR ------------------
-    if (interaction.commandName === 'clear') {
-
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-        return interaction.reply({ content: '❌ Keine Rechte!', ephemeral: true });
-      }
-
-      const amount = interaction.options.getInteger('anzahl');
-
-      await interaction.channel.bulkDelete(amount, true);
-
-      return interaction.reply({ content: `🧹 ${amount} gelöscht`, ephemeral: true });
     }
 
   } catch (err) {
     console.error(err);
-    if (!interaction.replied) {
-      interaction.reply({ content: '❌ Fehler beim Command!', ephemeral: true });
-    }
+    return interaction.editReply('❌ Fehler beim Command!');
   }
 });
 
-// ------------------ LOGIN ------------------
+// ---------------- LOGIN ----------------
 client.login(process.env.TOKEN);
